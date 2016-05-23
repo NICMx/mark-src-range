@@ -11,18 +11,28 @@ static const struct option opts[] = {
 	{ NULL },
 };
 
+/**
+ * Called whenever the user runs `ip6tables -j MARKSRCRANGE -h`.
+ */
 static void marksrcrange_tg_help(void)
 {
 	printf("MARKSRCRANGE target options:\n");
-	printf("[!] --mark-offset Number from which to start assigning marks\n");
+	printf("[!] --mark-offset               Number from which to start assigning marks\n");
 }
 
+/**
+ * Called first whenever the user appends a MARKSRCRANGE rule to mangle.
+ */
 static void marksrcrange_tg_init(struct xt_entry_target *target)
 {
 	struct xt_marksrcrange_tginfo *info = (void *)target->data;
 	memset(info, 0, sizeof(*info));
 }
 
+/**
+ * Called after _tg_init once for every argument the ip6tables command bridges
+ * to us.
+ */
 static int marksrcrange_tg_parse(int c, char **argv, int invert,
 		unsigned int *flags, const void *entry,
 		struct xt_entry_target **target)
@@ -46,6 +56,9 @@ static int marksrcrange_tg_parse(int c, char **argv, int invert,
 	return false;
 }
 
+/**
+ * Called whenever the user runs `ip6tables -t mangle -L`.
+ */
 static void marksrcrange_tg_print(const void *entry,
 		const struct xt_entry_target *target,
 		int numeric)
@@ -73,11 +86,15 @@ static void marksrcrange_tg_print(const void *entry,
 	printf("%s ", xtables_ip6addr_to_numeric(&last));
 }
 
+/**
+ * Called whenever the user runs `ip6tables-save`.
+ * (Remember you might need to sudo.)
+ */
 static void marksrcrange_tg_save(const void *entry,
 		const struct xt_entry_target *target)
 {
 	const struct xt_marksrcrange_tginfo *info = (const void *)target->data;
-	printf("--mark-offset:%u\n", info->mark_offset);
+	printf(" --mark-offset %u", info->mark_offset);
 }
 
 static struct xtables_target marksrcrange_tg_reg = {
@@ -95,6 +112,10 @@ static struct xtables_target marksrcrange_tg_reg = {
 	.extra_opts    = opts,
 };
 
+/**
+ * I'm not sure exactly when this is called, but is pretty much the `main()` of
+ * this program.
+ */
 static void _init(void)
 {
 	xtables_register_target(&marksrcrange_tg_reg);

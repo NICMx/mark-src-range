@@ -56,6 +56,9 @@ overflow:
 	return -EINVAL;
 }
 
+/**
+ * Called when the kernel wants us to validate an entry the user is adding.
+ */
 static int check_entry(const struct xt_tgchk_param *param)
 {
 	struct ip6t_ip6 *entry = &((struct ip6t_entry *)param->entryinfo)->ipv6;
@@ -113,6 +116,10 @@ bad_prefix_len:
 	return -EINVAL;
 }
 
+/**
+ * Called on every matched packet and is the meat of this whole project;
+ * marks the packet depending on its source address.
+ */
 static unsigned int change_mark(struct sk_buff *skb,
 		const struct xt_action_param *param)
 {
@@ -137,6 +144,10 @@ static struct xt_target marksrcrange_tg_reg __read_mostly = {
 	.me             = THIS_MODULE,
 };
 
+/**
+ * Called when the user modprobes the module.
+ * (Which normally happens when they append the first MARKSRCRANGE rule.)
+ */
 static int __init marksrcrange_tg_init(void)
 {
 	int error;
@@ -144,6 +155,9 @@ static int __init marksrcrange_tg_init(void)
 	return (error < 0) ? error : 0;
 }
 
+/**
+ * Called when the user "modprobe -r"'s the module.
+ */
 static void __exit marksrcrange_tg_exit(void)
 {
 	xt_unregister_target(&marksrcrange_tg_reg);

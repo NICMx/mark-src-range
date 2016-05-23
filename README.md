@@ -69,3 +69,8 @@ This is otherwise standard ip6tables fare. You can, for example, see your rules 
 	MARKSRCRANGE all      2001:db8:1::/112 anywhere    marks 65536-131071 (0x10000-0x1ffff); addresses 2001:db8:1:: - 2001:db8:1::ffff 
 	MARKSRCRANGE all      2001:db8:2::/112 anywhere    marks 524288-589823 (0x80000-0x8ffff); addresses 2001:db8:2:: - 2001:db8:2::ffff
 
+## TODO
+
+1. Test in environments other than Ubuntu 14.04, kernel 3.13.
+2. Add configuration script and DKMS.
+

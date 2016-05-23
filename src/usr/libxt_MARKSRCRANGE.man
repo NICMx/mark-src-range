@@ -1,0 +1,21 @@
+.TH MARKSRCRANGE 8 2016-05-23 v1.0.0 "Mark by source ranges"
+
+.SH SUMMARY
+.BR MARKSRCRANGE " condenses several `-s <ADDR> -j MARK` ip6tables rules into one, minimizing table walkthrough overhead."
+
+.SH SYNTAX
+	ip6tables --table mangle
+.br
+			--append PREROUTING
+.br
+.RI "			--source " <PREFIX>
+.br
+			--target MARKSRCRANGE
+.br
+.RI "			[--mark-offset " <OFFSET> "]"
+
+.SH DESCRIPTION
+.RI "Will distribute the " <PREFIX> " clients across marks " <OFFSET> " through " <OFFSET> " + [number of clients in " <PREFIX> "] - 1. (" <PREFIX> " is an IPv6 CIDR prefix and " <OFFSET> " is an unsigned 32-bit integer that defaults to zero.)
+.P
+The table must be mangle and the chain must be PREROUTING, otherwise ip6tables will be unable to find MARKSRCRANGE. You should be able to include more match logic but --source must be present. If you get cryptic errors, try running dmesg | tail.
+

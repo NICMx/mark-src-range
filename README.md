@@ -73,7 +73,7 @@ This is otherwise standard ip6tables fare. You can, for example, see your rules 
 
 Particularly since `--sub-prefix-len` can complicate things, you can find in the `test` folder the source code for a small binary that can help you review the marks your rules are expected to generate.
 
-All the binary does is print the mark/prefix combinations that will result from a MARKSRCRANGE rule. You must invoque it using the same `--source`, `--mark-offset` and `--sub-prefix-len` arguments from your rule. For example,
+All the binary does is print the mark/prefix combinations that will result from a MARKSRCRANGE rule. You must invoke it using the same `--source`, `--mark-offset` and `--sub-prefix-len` arguments from your rule. For example,
 
 	$ cd <MARKSRCRANGE>/test
 	$ make
@@ -84,7 +84,7 @@ All the binary does is print the mark/prefix combinations that will result from 
 	258	0x102	2001:db8:1234:5602::/64
 	259	0x103	2001:db8:1234:5603::/64
 	260	0x104	2001:db8:1234:5604::/64
-	<output chopped off for readability>
+	...
 	510	0x1fe	2001:db8:1234:56fe::/64
 	511	0x1ff	2001:db8:1234:56ff::/64
 	

@@ -1,5 +1,5 @@
-#ifndef _JOOL_COMMON_XT_MARKSRCRANGE_H
-#define _JOOL_COMMON_XT_MARKSRCRANGE_H
+#ifndef SRC_XT_MARKSRCRANGE_H_
+#define SRC_XT_MARKSRCRANGE_H_
 
 #include <linux/types.h>
 #ifdef __KERNEL__
@@ -21,5 +21,8 @@ struct xt_marksrcrange_tginfo {
 	__u8 sub_prefix_len;
 };
 
-#endif /* _JOOL_COMMON_XT_MARKSRCRANGE_H */
+__u32 src_to_mark(const struct in6_addr *src,
+		const struct xt_marksrcrange_tginfo *cfg);
+
+#endif /* SRC_XT_MARKSRCRANGE_H_ */
 

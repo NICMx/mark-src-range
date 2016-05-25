@@ -143,6 +143,7 @@ int str_to_prefix6(const char *str, struct ipv6_prefix *prefix_out)
 static int parse_args(int argc, char *argv[], struct xt_marksrcrange_tginfo *info)
 {
 	unsigned int i;
+	bool source_set = false;
 
 	memset(info, 0, sizeof(*info));
 	info->sub_prefix_len = 128;
@@ -151,6 +152,7 @@ static int parse_args(int argc, char *argv[], struct xt_marksrcrange_tginfo *inf
 		if (strcmp(argv[i], "--source") == 0) {
 			if (str_to_prefix6(argv[i + 1], &info->prefix))
 				return 1;
+			source_set = 1;
 		} else if (strcmp(argv[i], "--mark-offset") == 0) {
 			if (str_to_u32(argv[i + 1], &info->mark_offset, 0, 0xFFFFFFFFu))
 				return 1;
@@ -158,6 +160,11 @@ static int parse_args(int argc, char *argv[], struct xt_marksrcrange_tginfo *inf
 			if (str_to_u8(argv[i + 1], &info->sub_prefix_len, 0, 128))
 				return 1;
 		}
+	}
+
+	if (!source_set) {
+		printf("The --source argument is mandatory.\n");
+		return 1;
 	}
 
 	if (info->sub_prefix_len - info->prefix.len > 32) {

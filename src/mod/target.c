@@ -1,28 +1,8 @@
-/*
- * Based off the mark match/target. (Linux/net/netfilter/xt_mark.c)
- */
+#include "target.h"
 
-#include "xt_MARKSRCRANGE.h"
-
-#include <linux/module.h>
-#include <linux/skbuff.h>
 #include <net/ipv6.h>
-#include <linux/netfilter/x_tables.h>
+#include <linux/skbuff.h>
 #include <linux/netfilter_ipv6/ip6_tables.h>
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Alberto Leiva <ydahhrk@gmail.com>");
-MODULE_DESCRIPTION("Marks packets depending on source address");
-MODULE_ALIAS("ip6t_MARKSRCRANGE");
-
-/**
- * An "IPv6 address quadrant" is one of the address's four 32-bit chunks.
- * This is just a clutter-saver.
- */
-static __u32 quadrant(const struct in6_addr *addr, unsigned int index)
-{
-	return ntohl(addr->s6_addr32[index]);
-}
 
 static bool last_bit_is_zero(unsigned int num)
 {
@@ -39,7 +19,7 @@ static __u8 dot_decimal_to_cidr(struct in6_addr *mask)
 	unsigned int j;
 
 	for (i = 0; i < 4; i++) {
-		quad = quadrant(mask, i);
+		quad = be32_to_cpu(mask->s6_addr32[i]);
 		if (quad == 0)
 			return 32 * i;
 		if (quad != 0xFFFFFFFFu) {
@@ -81,7 +61,7 @@ overflow:
 /**
  * Called when the kernel wants us to validate an entry the user is adding.
  */
-static int check_entry(const struct xt_tgchk_param *param)
+int check_entry(const struct xt_tgchk_param *param)
 {
 	struct ip6t_ip6 *entry = &((struct ip6t_entry *)param->entryinfo)->ipv6;
 	struct xt_marksrcrange_tginfo *info = param->targinfo;
@@ -110,21 +90,36 @@ static int check_entry(const struct xt_tgchk_param *param)
 	return validate(info);
 }
 
-static __u32 extract_bits(struct in6_addr *addr, __u8 from, __u8 to)
+/**
+ * An "IPv6 address quadrant" is one of the address's four 32-bit chunks.
+ * This is just a clutter-saver.
+ */
+static __u32 quadrant(const struct in6_addr *addr, const __u8 bit)
+{
+	return (bit < 128) ? be32_to_cpu(addr->s6_addr32[bit >> 5]) : 0;
+}
+
+static __u32 extract_bits(const struct in6_addr *addr,
+		const __u8 from, const __u8 to)
 {
 	__u32 result;
 
+	/*
+	 * Remember: "& 0x1F" is a faster way of saying "% 32"
+	 * and ">> 5" is a faster way of saying "/ 32".
+	 */
+
 	/* Store the 32 address bits from the quadrant @from is in. */
-	result = quadrant(addr, from >> 5);
+	result = quadrant(addr, from);
 	/* Remove the bits that are at @from's left. */
 	result &= (((__u64)0x100000000) >> (from & 0x1F)) - 1;
 
 	/* Do @from and @to belong to different quadrants? */
 	if ((from & 0x60) != (to & 0x60)) {
-		/* Move the bits from the left quadrant to make room. */
+		/* Move the left quadrant bits to make room. */
 		result <<= to & 0x1F;
 		/* Bring over the relevant bits from @to's quadrant. */
-		result |= quadrant(addr, to >> 5) >> ((128 - to) & 0x1F);
+		result |= quadrant(addr, to) >> ((128 - to) & 0x1F);
 	} else {
 		/* Remove the bits that are at @to's right. */
 		result >>= (128 - to) & 0x1F;
@@ -134,61 +129,29 @@ static __u32 extract_bits(struct in6_addr *addr, __u8 from, __u8 to)
 }
 
 /**
- * Called on every matched packet and is the meat of this whole project;
- * marks the packet depending on its source address.
- *
- * Note: Because we're handling prefixes,
- * if --source is 2001:db8::/112 and --sub-prefix-len is 120,
- * 2001:db8::1 will also be marked.
+ * This is the meat of the whole project;
+ * returns the mark that corresponds to the @src source address,
+ * according to the @cfg configuration.
  */
-static unsigned int change_mark(struct sk_buff *skb,
+__u32 src_to_mark(const struct in6_addr *src,
+		const struct xt_marksrcrange_tginfo *cfg)
+{
+	return cfg->mark_offset + extract_bits(src, cfg->prefix.len,
+			cfg->sub_prefix_len);
+}
+
+/**
+ * Called on every matched packet; marks the packet depending on its source
+ * address.
+ */
+unsigned int change_mark(struct sk_buff *skb,
 		const struct xt_action_param *param)
 {
-	const struct xt_marksrcrange_tginfo *info = param->targinfo;
-	struct in6_addr *src;
-	__u32 client;
+	struct in6_addr *src = &ipv6_hdr(skb)->saddr;
 
-	src = &ipv6_hdr(skb)->saddr;
-	client = extract_bits(src, info->prefix.len, info->sub_prefix_len);
-	skb->mark = info->mark_offset + client;
-
+	skb->mark = src_to_mark(src, param->targinfo);
 	pr_debug("MARKSRCRANGE: Packet from %pI6c was marked %u.\n",
 			src, skb->mark);
 
 	return XT_CONTINUE;
 }
-
-static struct xt_target marksrcrange_tg_reg __read_mostly = {
-	.name           = "MARKSRCRANGE",
-	.revision       = 0,
-	.family         = NFPROTO_IPV6,
-	.hooks          = 1 << NF_INET_PRE_ROUTING,
-	.table          = "mangle",
-	.checkentry     = check_entry,
-	.target         = change_mark,
-	.targetsize     = sizeof(struct xt_marksrcrange_tginfo),
-	.me             = THIS_MODULE,
-};
-
-/**
- * Called when the user modprobes the module.
- * (Which normally happens when they append the first MARKSRCRANGE rule.)
- */
-static int __init marksrcrange_tg_init(void)
-{
-	int error;
-	error = xt_register_target(&marksrcrange_tg_reg);
-	return (error < 0) ? error : 0;
-}
-
-/**
- * Called when the user "modprobe -r"'s the module.
- */
-static void __exit marksrcrange_tg_exit(void)
-{
-	xt_unregister_target(&marksrcrange_tg_reg);
-}
-
-module_init(marksrcrange_tg_init);
-module_exit(marksrcrange_tg_exit);
-

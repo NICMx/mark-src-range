@@ -10,6 +10,9 @@ MODULE_DESCRIPTION("Unit tests for xt_MARKSRCRANGE");
 static unsigned int yays = 0;
 static unsigned int nays = 0;
 
+/**
+ * Asserts src_to_mark(@src_str, @plen, @splen, @offset) == @expected.
+ */
 static bool test(char *src_str, __u8 plen, __u8 splen, __u32 offset,
 		__u32 expected)
 {
@@ -43,6 +46,7 @@ static bool test(char *src_str, __u8 plen, __u8 splen, __u32 offset,
 
 static int msr_init(void)
 {
+	const char *MANY_FS = "ffff:ffff:ffff:ffff:ffff:ffff";
 	bool success = true;
 	pr_info("Starting xt_MARKSRCRANGE tests.\n");
 
@@ -60,12 +64,12 @@ static int msr_init(void)
 	/*
 	 * Same, but invert bytes to make sure it's not an initialization trick.
 	 */
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff::", 96, 128, 0, 0);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff::", 112, 128, 0, 0);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ff00", 120, 128, 0, 0);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:fff8", 125, 128, 0, 0);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe", 127, 128, 0, 0);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 128, 128, 0, 0);
+	success &= test(MANY_FS "::", 96, 128, 0, 0);
+	success &= test(MANY_FS ":ffff::", 112, 128, 0, 0);
+	success &= test(MANY_FS ":ffff:ff00", 120, 128, 0, 0);
+	success &= test(MANY_FS ":ffff:fff8", 125, 128, 0, 0);
+	success &= test(MANY_FS ":ffff:fffe", 127, 128, 0, 0);
+	success &= test(MANY_FS ":ffff:ffff", 128, 128, 0, 0);
 
 	/*
 	 * Now do everything again, except try the last address of the range.
@@ -75,12 +79,12 @@ static int msr_init(void)
 	success &= test("::ff", 120, 128, 0, 0xff);
 	success &= test("::7", 125, 128, 0, 7);
 	success &= test("::1", 127, 128, 0, 1);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 96, 128, 0, 0xffffffff);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 112, 128, 0, 0xffff);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 120, 128, 0, 0xff);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 125, 128, 0, 7);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 127, 128, 0, 1);
-	success &= test("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 128, 128, 0, 0);
+	success &= test(MANY_FS ":ffff:ffff", 96, 128, 0, 0xffffffff);
+	success &= test(MANY_FS ":ffff:ffff", 112, 128, 0, 0xffff);
+	success &= test(MANY_FS ":ffff:ffff", 120, 128, 0, 0xff);
+	success &= test(MANY_FS ":ffff:ffff", 125, 128, 0, 7);
+	success &= test(MANY_FS ":ffff:ffff", 127, 128, 0, 1);
+	success &= test(MANY_FS ":ffff:ffff", 128, 128, 0, 0);
 
 	/*
 	 * Now do everything yet again, except try some other quadrant.

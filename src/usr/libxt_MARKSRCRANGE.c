@@ -32,7 +32,7 @@ static void marksrcrange_tg_init(struct xt_entry_target *target)
 	info->sub_prefix_len = 128;
 }
 
-bool parse_mark_offset(char *argv, __u32 *result)
+static bool parse_mark_offset(char *argv, __u32 *result)
 {
 	unsigned int tmp;
 
@@ -47,7 +47,7 @@ bool parse_mark_offset(char *argv, __u32 *result)
 	return false;
 }
 
-bool parse_prefix_len(char *argv, __u8 *result)
+static bool parse_prefix_len(char *argv, __u8 *result)
 {
 	unsigned int tmp;
 

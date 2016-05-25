@@ -56,7 +56,7 @@ Kbuild only and no configuration script yet; sorry.
 
 	ip6tables -t mangle -A PREROUTING --source <PREFIX> -j MARKSRCRANGE [--mark-offset <OFFSET>] [--sub-prefix-len <SUB>]
 
-Will distribute longer sub-prefixes of lenght `/<SUB>` taken from the shorter `<PREFIX>` across marks `<OFFSET>` through `<OFFSET> + [number of /<SUB> prefixes in <PREFIX>] - 1`. (`<PREFIX>` is an IPv6 CIDR prefix, `<OFFSET>` is an unsigned 32-bit integer that defaults to zero and `<SUB>` is a prefix lenght that defaults to 128.)
+Will distribute longer sub-prefixes of length `/<SUB>` taken from the shorter `<PREFIX>` across marks `<OFFSET>` through `<OFFSET> + [number of /<SUB> prefixes in <PREFIX>] - 1`. (`<PREFIX>` is an IPv6 CIDR prefix, `<OFFSET>` is an unsigned 32-bit integer that defaults to zero and `<SUB>` is a prefix length that defaults to 128.)
 
 The table _must_ be `mangle` and the chain _must_ be `PREROUTING`, otherwise ip6tables will be unable to find MARKSRCRANGE. You should be able to include more match logic but `--source` _must_ be present. If you get cryptic errors, try running `dmesg | tail`.
 

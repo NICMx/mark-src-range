@@ -5,7 +5,7 @@ OTHER_TARGETS = install clean
 all: $(PROJECTS)
 	# Ok, done.
 $(PROJECTS):
-	$(MAKE) -C $@
+	$(MAKE) -C $@ MARKSRCRANGE_FLAGS=$(MARKSRCRANGE_FLAGS)
 $(OTHER_TARGETS):
 	$(foreach dir, $(PROJECTS), $(MAKE) -C $(dir) $@;)
 

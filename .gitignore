@@ -30,3 +30,16 @@
 
 # Debug files
 *.dSYM/
+
+# Eclipse noise
+.cproject
+.project
+.settings
+
+# Kernel module compilation output
+*.cmd
+.tmp_versions
+Module.symvers
+modules.order
+*.mod.c
+

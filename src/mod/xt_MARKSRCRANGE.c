@@ -15,39 +15,61 @@ MODULE_AUTHOR("Alberto Leiva <ydahhrk@gmail.com>");
 MODULE_DESCRIPTION("Marks packets depending on source address");
 MODULE_ALIAS("ip6t_MARKSRCRANGE");
 
+/**
+ * An "IPv6 address quadrant" is one of the address's four 32-bit chunks.
+ * This is just a clutter-saver.
+ */
+static __u32 quadrant(const struct in6_addr *addr, unsigned int index)
+{
+	return ntohl(addr->s6_addr32[index]);
+}
+
 static bool last_bit_is_zero(unsigned int num)
 {
 	return !(num & 1);
 }
 
 /**
- * The "fourth quadrant" of an IPv6 address is its last 32 bits.
- * (128 / 4 = 32)
+ * Assumes that @mask represents a network mask and returns its prefix length.
  */
-static __u32 quadrant4(const struct in6_addr *addr)
+static __u8 dot_decimal_to_cidr(struct in6_addr *mask)
 {
-	return be32_to_cpu(addr->s6_addr32[3]);
-}
+	__u32 quad;
+	unsigned int i;
+	unsigned int j;
 
-static int validate_overflow(struct xt_marksrcrange_tginfo *info)
-{
-	__u64 max_mark;
-
-	/*
-	 * This is a special corner case of the validation below.
-	 * (1u << 32 is undefined.)
-	 */
-	if (128 - info->prefix.len == 32) {
-		if (info->mark_offset == 0)
-			return 0;
-		goto overflow;
+	for (i = 0; i < 4; i++) {
+		quad = quadrant(mask, i);
+		if (quad == 0)
+			return 32 * i;
+		if (quad != 0xFFFFFFFFu) {
+			for (j = 0; last_bit_is_zero(quad); j++)
+				quad >>= 1;
+			return 32 * (i + 1) - j;
+		}
 	}
 
-	max_mark = ((__u64)info->mark_offset)
-			+ (1u << (128 - info->prefix.len))
-			- 1;
-	if (max_mark > 0xFFFFFFFF)
+	return 128;
+}
+
+static int validate(struct xt_marksrcrange_tginfo *info)
+{
+	__u64 client_count;
+	__u64 max_mark;
+
+	if (info->prefix.len > info->sub_prefix_len) {
+		pr_err("MARKSRCRANGE: sub-prefix-len is supposed to be longer or equal than --source's length.\n");
+		return -EINVAL;
+	}
+
+	if (info->sub_prefix_len - info->prefix.len > 32)
 		goto overflow;
+
+	client_count = ((__u64)1) << (info->sub_prefix_len - info->prefix.len);
+	max_mark = info->mark_offset + client_count - 1;
+	if (max_mark > 0xFFFFFFFFu)
+		goto overflow;
+
 	return 0;
 
 overflow:
@@ -63,8 +85,6 @@ static int check_entry(const struct xt_tgchk_param *param)
 {
 	struct ip6t_ip6 *entry = &((struct ip6t_entry *)param->entryinfo)->ipv6;
 	struct xt_marksrcrange_tginfo *info = param->targinfo;
-	unsigned int quadrant;
-	unsigned int i;
 
 	/*
 	 * Yes, I'm editing @info. Even though it is pointed by an object that
@@ -85,50 +105,56 @@ static int check_entry(const struct xt_tgchk_param *param)
 	 * undefined behavior.
 	 */
 	memcpy(&info->prefix, &entry->src, sizeof(entry->src));
+	info->prefix.len = dot_decimal_to_cidr(&entry->smsk);
 
-	/* Assert prefix length >= 96. */
-	if (entry->smsk.s6_addr32[0] == 0) {
-		pr_err("MARKSRCRANGE: I'm confused. Perhaps you forgot the --source argument?\n");
-		return -EINVAL;
-	}
-	if (entry->smsk.s6_addr32[0] != cpu_to_be32(0xFFFFFFFF))
-		goto bad_prefix_len;
-	if (entry->smsk.s6_addr32[1] != cpu_to_be32(0xFFFFFFFF))
-		goto bad_prefix_len;
-	if (entry->smsk.s6_addr32[2] != cpu_to_be32(0xFFFFFFFF))
-		goto bad_prefix_len;
+	return validate(info);
+}
 
-	/* Convert subnet mask from dot-decimal to CIDR format. */
-	if (entry->smsk.s6_addr32[3] == 0) {
-		info->prefix.len = 96;
+static __u32 extract_bits(struct in6_addr *addr, __u8 from, __u8 to)
+{
+	__u32 result;
+
+	/* Store the 32 address bits from the quadrant @from is in. */
+	result = quadrant(addr, from >> 5);
+	/* Remove the bits that are at @from's left. */
+	result &= (((__u64)0x100000000) >> (from & 0x1F)) - 1;
+
+	/* Do @from and @to belong to different quadrants? */
+	if ((from & 0x60) != (to & 0x60)) {
+		/* Move the bits from the left quadrant to make room. */
+		result <<= to & 0x1F;
+		/* Bring over the relevant bits from @to's quadrant. */
+		result |= quadrant(addr, to >> 5) >> ((128 - to) & 0x1F);
 	} else {
-		quadrant = quadrant4(&entry->smsk);
-		for (i = 0; last_bit_is_zero(quadrant); i++)
-			quadrant >>= 1;
-		info->prefix.len = 128 - i;
+		/* Remove the bits that are at @to's right. */
+		result >>= (128 - to) & 0x1F;
 	}
 
-	return validate_overflow(info);
-
-bad_prefix_len:
-	pr_err("MARKSRCRANGE: Prefix length must be >= 96.\n");
-	pr_err("MARKSRCRANGE: (There are only 2^32 marks)\n");
-	return -EINVAL;
+	return result;
 }
 
 /**
  * Called on every matched packet and is the meat of this whole project;
  * marks the packet depending on its source address.
+ *
+ * Note: Because we're handling prefixes,
+ * if --source is 2001:db8::/112 and --sub-prefix-len is 120,
+ * 2001:db8::1 will also be marked.
  */
 static unsigned int change_mark(struct sk_buff *skb,
 		const struct xt_action_param *param)
 {
 	const struct xt_marksrcrange_tginfo *info = param->targinfo;
-	struct in6_addr *addr = &ipv6_hdr(skb)->saddr;
-	__u32 index;
+	struct in6_addr *src;
+	__u32 client;
 
-	index = quadrant4(addr) - quadrant4(&info->prefix.address);
-	skb->mark = info->mark_offset + index;
+	src = &ipv6_hdr(skb)->saddr;
+	client = extract_bits(src, info->prefix.len, info->sub_prefix_len);
+	skb->mark = info->mark_offset + client;
+
+	pr_debug("MARKSRCRANGE: Packet from %pI6c was marked %u.\n",
+			src, skb->mark);
+
 	return XT_CONTINUE;
 }
 

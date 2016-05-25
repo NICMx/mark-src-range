@@ -8,6 +8,7 @@
 
 static const struct option opts[] = {
 	{ .name = "mark-offset", .has_arg = 1, .val = 'm' },
+	{ .name = "sub-prefix-len", .has_arg = 1, .val = 's' },
 	{ NULL },
 };
 
@@ -18,6 +19,7 @@ static void marksrcrange_tg_help(void)
 {
 	printf("MARKSRCRANGE target options:\n");
 	printf("[!] --mark-offset               Number from which to start assigning marks\n");
+	printf("[!] --sub-prefix-len            See https://github.com/NICMx/mark-src-range/issues/1\n");
 }
 
 /**
@@ -27,6 +29,37 @@ static void marksrcrange_tg_init(struct xt_entry_target *target)
 {
 	struct xt_marksrcrange_tginfo *info = (void *)target->data;
 	memset(info, 0, sizeof(*info));
+	info->sub_prefix_len = 128;
+}
+
+bool parse_mark_offset(char *argv, __u32 *result)
+{
+	unsigned int tmp;
+
+	if (xtables_strtoui(argv, NULL, &tmp, 0, 0xFFFFFFFFu)) {
+		*result = tmp;
+		return true;
+	}
+
+	xtables_error(PARAMETER_PROBLEM,
+			"Cannot parse '%s' as an unsigned 32-bit integer.",
+			argv);
+	return false;
+}
+
+bool parse_prefix_len(char *argv, __u8 *result)
+{
+	unsigned int tmp;
+
+	if (xtables_strtoui(argv, NULL, &tmp, 0, 128)) {
+		*result = tmp;
+		return true;
+	}
+
+	xtables_error(PARAMETER_PROBLEM,
+			"Cannot parse '%s' as an integer in the range [0, 128].",
+			argv);
+	return false;
 }
 
 /**
@@ -38,19 +71,12 @@ static int marksrcrange_tg_parse(int c, char **argv, int invert,
 		struct xt_entry_target **target)
 {
 	struct xt_marksrcrange_tginfo *info = (void *)(*target)->data;
-	unsigned int tmp;
 
 	switch (c) {
 	case 'm':
-		if (!xtables_strtoui(optarg, NULL, &tmp, 0, 0xFFFFFFFFu)) {
-			xtables_error(PARAMETER_PROBLEM,
-					"Cannot parse '%s' as an unsigned 32-bit integer.",
-					optarg);
-			return false;
-		}
-
-		info->mark_offset = tmp;
-		return true;
+		return parse_mark_offset(optarg, &info->mark_offset);
+	case 's':
+		return parse_prefix_len(optarg, &info->sub_prefix_len);
 	}
 
 	return false;
@@ -65,25 +91,13 @@ static void marksrcrange_tg_print(const void *entry,
 {
 	const struct xt_marksrcrange_tginfo *info = (const void *)target->data;
 	unsigned int max;
-	struct in6_addr last;
 
-	if (info->prefix.len != 96)
-		max = (1u << (128 - info->prefix.len)) - 1;
-	else
-		max = 0xFFFFFFFF;
-	last = info->prefix.address;
-	last.s6_addr32[3] = htonl(ntohl(last.s6_addr32[3]) | max);
+	max = (((__u64)1) << (info->sub_prefix_len - info->prefix.len)) - 1;
 
-	printf("marks %u-%u (0x%x-0x%x); addresses %s - ",
+	printf("marks %u-%u (0x%x-0x%x) /%u/%u ",
 			info->mark_offset, info->mark_offset + max,
 			info->mark_offset, info->mark_offset + max,
-			xtables_ip6addr_to_numeric(&info->prefix.address));
-	/*
-	 * xtables_ip6addr_to_numeric's return value is static so this needs to
-	 * be a separate printf...
-	 * Beautiful.
-	 */
-	printf("%s ", xtables_ip6addr_to_numeric(&last));
+			info->prefix.len, info->sub_prefix_len);
 }
 
 /**
@@ -94,7 +108,9 @@ static void marksrcrange_tg_save(const void *entry,
 		const struct xt_entry_target *target)
 {
 	const struct xt_marksrcrange_tginfo *info = (const void *)target->data;
-	printf(" --mark-offset %u", info->mark_offset);
+	printf(" --mark-offset %u --sub-prefix-len %u",
+			info->mark_offset,
+			info->sub_prefix_len);
 }
 
 static struct xtables_target marksrcrange_tg_reg = {

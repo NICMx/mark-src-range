@@ -18,6 +18,7 @@ struct ipv6_prefix {
 struct xt_marksrcrange_tginfo {
 	__u32 mark_offset;
 	struct ipv6_prefix prefix;
+	__u8 sub_prefix_len;
 };
 
 #endif /* _JOOL_COMMON_XT_MARKSRCRANGE_H */

@@ -54,9 +54,11 @@ Kbuild only and no configuration script yet; sorry.
 
 ## Usage
 
-	ip6tables -t mangle -A PREROUTING --source <PREFIX> -j MARKSRCRANGE [--mark-offset <OFFSET>]
+	ip6tables -t mangle -A PREROUTING --source <PREFIX> -j MARKSRCRANGE [--mark-offset <OFFSET>] [--sub-prefix-len <SUB>]
 
 Will distribute the `<PREFIX>` clients across marks `<OFFSET>` through `<OFFSET> + [number of clients in <PREFIX>] - 1`. (`<PREFIX>` is an IPv6 CIDR prefix and `<OFFSET>` is an unsigned 32-bit integer that defaults to zero.)
+
+Though useful, `--sub-prefix-len` is difficult to explain. Better read the [issue that spawned it](https://github.com/NICMx/mark-src-range/issues/1) while I wrap my head around documenting it.
 
 The table _must_ be `mangle` and the chain _must_ be `PREROUTING`, otherwise ip6tables will be unable to find MARKSRCRANGE. You should be able to include more match logic but `--source` _must_ be present. If you get cryptic errors, try running `dmesg | tail`.
 
@@ -65,9 +67,53 @@ This is otherwise standard ip6tables fare. You can, for example, see your rules 
 	# ip6tables -t mangle -L PREROUTING
 	Chain PREROUTING (policy ACCEPT)
 	target       prot opt source           destination 
-	MARKSRCRANGE all      2001:db8::/112   anywhere    marks 0-65535 (0x0-0xffff); addresses 2001:db8:: - 2001:db8::ffff 
-	MARKSRCRANGE all      2001:db8:1::/112 anywhere    marks 65536-131071 (0x10000-0x1ffff); addresses 2001:db8:1:: - 2001:db8:1::ffff 
-	MARKSRCRANGE all      2001:db8:2::/112 anywhere    marks 524288-589823 (0x80000-0x8ffff); addresses 2001:db8:2:: - 2001:db8:2::ffff
+	MARKSRCRANGE all      2001:db8::/112   anywhere    marks 0-65535 (0x0-0xffff) /112/128 
+	MARKSRCRANGE all      2001:db8:1::/112 anywhere    marks 65536-131071 (0x10000-0x1ffff) /112/128
+	MARKSRCRANGE all      2001:db8:2::/112 anywhere    marks 524288-589823 (0x80000-0x8ffff) /112/128
+
+## Configuration Testing
+
+Particularly since `--sub-prefix-len` can complicate things, you can find in the `test` folder the source code for a small binary that can help you review the marks your rules are expected to generate.
+
+All the binary does is print the mark/prefix combinations that will result from a MARKSRCRANGE rule. You must invoque it using the same `--source`, `--mark-offset` and `--sub-prefix-len` arguments from your rule. For example,
+
+	$ cd <MARKSRCRANGE>/test
+	$ make
+	$ ./test.out --source 2001:db8:1234:5600::/56 --mark-offset 256 --sub-prefix-len 64
+	Mark		Prefix
+	256	0x100	2001:db8:1234:5600::/64
+	257	0x101	2001:db8:1234:5601::/64
+	258	0x102	2001:db8:1234:5602::/64
+	259	0x103	2001:db8:1234:5603::/64
+	260	0x104	2001:db8:1234:5604::/64
+	<output chopped off for readability>
+	510	0x1fe	2001:db8:1234:56fe::/64
+	511	0x1ff	2001:db8:1234:56ff::/64
+	
+The above output states that a rule that would use the given configuration should mark clients matching 2001:db8:1234:5600::/64 as 256, clients matching 2001:db8:1234:5601::/64 as 257, etc.
+
+A more involved and bulletproof method to tell whether your rules are doing what you want is to enable debugging on the kernel module:
+
+	$ # Obtain a debugging-enabled binary.
+	$ cd <MARKSRCRANGE>/mod
+	$ make MARKSRCRANGE_FLAGS=-DDEBUG
+	$ sudo make install
+	$
+	$ # Make sure the old binary will not interfere.
+	$ sudo ip6tables -t mangle -F
+	$ sudo modprobe -r xt_MARKSRCRANGE
+	$
+	$ # Reinsert your rules, since you just removed them.
+	$ sudo ip6tables -t mangle -A PREROUTING -j MARKSRCRANGE ...
+	$
+	$ # Read the kernel log.
+	$ dmesg -t
+	MARKSRCRANGE: Packet from 2001:db8:1234:560f::2 was marked 15.
+	MARKSRCRANGE: Packet from 2001:db8:1234:560f::2 was marked 15.
+	MARKSRCRANGE: Packet from 2001:db8:1234:56ff::2 was marked 255.
+	MARKSRCRANGE: Packet from 2001:db8:1234:56ff::2 was marked 255.
+
+Remember to revert this when you're done testing to avoid heavy logging. (You will have to `ip6tables -F` and `modprobe -r` the module again!)
 
 ## TODO
 

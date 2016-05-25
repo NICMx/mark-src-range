@@ -1,7 +1,7 @@
 MODULES_DIR := /lib/modules/$(shell uname -r)
 KERNEL_DIR := ${MODULES_DIR}/build
 
-ccflags-y := -I$(src)/..
+ccflags-y := -I$(src)/.. $(MARKSRCRANGE_FLAGS)
 obj-m += xt_MARKSRCRANGE.o
 
 all:

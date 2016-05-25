@@ -28,20 +28,20 @@ Is equivalent to this:
 
 And this:
 
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:0::/120 -j MARKSRCRANGE --mark-offset 0
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:1::/120 -j MARKSRCRANGE --mark-offset 256
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:a00::/56 -j MARKSRCRANGE --mark-offset 0 --sub-prefix-len 64
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:b00::/56 -j MARKSRCRANGE --mark-offset 256 --sub-prefix-len 64
 
 Is the same as this:
 
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:0::0 -j MARK --set-mark 0
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:0::1 -j MARK --set-mark 1
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:a00::/64 -j MARK --set-mark 0
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:a01::/64 -j MARK --set-mark 1
 	...
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:0::FF -j MARK --set-mark 255
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:aff::/64 -j MARK --set-mark 255
 
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:1::0 -j MARK --set-mark 256
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:1::1 -j MARK --set-mark 257
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:b00::/64 -j MARK --set-mark 256
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:b01::/64 -j MARK --set-mark 257
 	...
-	ip6tables -t mangle -A PREROUTING --source 2001:db8:1::FF -j MARK --set-mark 511
+	ip6tables -t mangle -A PREROUTING --source 2001:db8:0:bff::/64 -j MARK --set-mark 511
 
 ## Installation
 
@@ -56,9 +56,7 @@ Kbuild only and no configuration script yet; sorry.
 
 	ip6tables -t mangle -A PREROUTING --source <PREFIX> -j MARKSRCRANGE [--mark-offset <OFFSET>] [--sub-prefix-len <SUB>]
 
-Will distribute the `<PREFIX>` clients across marks `<OFFSET>` through `<OFFSET> + [number of clients in <PREFIX>] - 1`. (`<PREFIX>` is an IPv6 CIDR prefix and `<OFFSET>` is an unsigned 32-bit integer that defaults to zero.)
-
-Though useful, `--sub-prefix-len` is difficult to explain. Better read the [issue that spawned it](https://github.com/NICMx/mark-src-range/issues/1) while I wrap my head around documenting it.
+Will distribute longer sub-prefixes of lenght `/<SUB>` taken from the shorter `<PREFIX>` across marks `<OFFSET>` through `<OFFSET> + [number of /<SUB> prefixes in <PREFIX>] - 1`. (`<PREFIX>` is an IPv6 CIDR prefix, `<OFFSET>` is an unsigned 32-bit integer that defaults to zero and `<SUB>` is a prefix lenght that defaults to 128.)
 
 The table _must_ be `mangle` and the chain _must_ be `PREROUTING`, otherwise ip6tables will be unable to find MARKSRCRANGE. You should be able to include more match logic but `--source` _must_ be present. If you get cryptic errors, try running `dmesg | tail`.
 
@@ -90,7 +88,7 @@ All the binary does is print the mark/prefix combinations that will result from 
 	510	0x1fe	2001:db8:1234:56fe::/64
 	511	0x1ff	2001:db8:1234:56ff::/64
 	
-The above output states that a rule that would use the given configuration should mark clients matching 2001:db8:1234:5600::/64 as 256, clients matching 2001:db8:1234:5601::/64 as 257, etc.
+The above output states that a rule that would use the given configuration should mark clients matching `2001:db8:1234:5600::/64` as `256`, clients matching `2001:db8:1234:5601::/64` as `257`, etc.
 
 A more involved and bulletproof method to tell whether your rules are doing what you want is to enable debugging on the kernel module:
 
